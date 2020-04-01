@@ -1,0 +1,31 @@
+{application, simple_push,
+ [{description, "simple_push managed by Nova"},
+  {vsn, "0.1.0"},
+  {registered, []},
+  {mod, { simple_push_app, []}},
+  {included_applications, [
+                           nova,
+                           mnesia,
+                           uuid,
+                           chatterbox
+                          ]},
+  {applications,
+   [kernel,
+    stdlib
+   ]},
+  {env,[
+        {web_port, 8080},
+        {rest_only, true},
+        {nova_applications, [
+                               #{
+                                 name => simple_push,
+                                 routes_file => "priv/simple_push.routes.erl"
+                                }
+                              ]}
+
+       ]},
+  {modules, []},
+  {maintainers, []},
+  {licenses, ["Apache 2.0"]},
+  {links, []}
+ ]}.
