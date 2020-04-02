@@ -13,17 +13,7 @@
    [kernel,
     stdlib
    ]},
-  {env,[
-        {web_port, 8080},
-        {rest_only, true},
-        {nova_applications, [
-                               #{
-                                 name => simple_push,
-                                 routes_file => "priv/simple_push.routes.erl"
-                                }
-                              ]}
-
-       ]},
+  {env,[]},
   {modules, []},
   {maintainers, []},
   {licenses, ["Apache 2.0"]},
