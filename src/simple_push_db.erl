@@ -95,7 +95,8 @@ fetch_account(#account{id = Id}) ->
                               ignore.
 init([]) ->
     process_flag(trap_exit, true),
-    mnesia:create_table(simple_push_account, [
+    quickrand:seed(),
+    mnesia:create_table(account, [
                                               {attributes, record_info(fields, account)},
                                               {disc_copies, [node()]},
                                               {type, set}
@@ -118,7 +119,7 @@ init([]) ->
                          {stop, Reason :: term(), Reply :: term(), NewState :: term()} |
                          {stop, Reason :: term(), NewState :: term()}.
 handle_call({create_account, Account = #account{}}, _From, State) ->
-    Id = zstdlib_uuid:gen(v4),
+    Id = uuid:uuid_to_string(uuid:get_v4_urandom()),
     Row = Account#account{id = Id},
     {atomic, _} = mnesia:transaction(fun() ->
                                              mnesia:write(Row)
