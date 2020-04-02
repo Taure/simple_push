@@ -29,7 +29,7 @@
 %%%===================================================================
 
 send(Account, DeviceTokens, Message, BundleId) ->
-    gen_server:cast(?MODULE, {send, {Account, DeviceTokens, Message, BundleId}}).
+    [gen_server:cast(?MODULE, {send, {Account, DeviceToken, Message, BundleId}}) ||DeviceToken <- DeviceTokens].
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -60,6 +60,7 @@ start_link() ->
 			      ignore.
 init([]) ->
     process_flag(trap_exit, true),
+    ets:new(apns_tokens, [named_table]),
     {ok, #state{}}.
 
 %%--------------------------------------------------------------------
@@ -100,7 +101,7 @@ handle_cast({send, {Account, DeviceToken, Message, BundleId}}, State) ->
               undefined -> connect();
               _ -> State#state.con
           end,
-    Token = new_token(Account),
+    Token = token(Account),
     NewState = case send_push(Con, Token, DeviceToken, Message, BundleId) of
                    ok -> #state{con = Con};
                    error -> #state{con = undefined}
@@ -208,9 +209,18 @@ send_push(Con, JwtToken, DeviceToken, Message, BundleId) ->
             error
     end.
 
-
+token(Account) ->
+    case ets:lookup(apns_tokens, Account#account.id) of
+        [{_, Time, Jwt}] -> case erlang:monotonic_time(seconds) - Time > 1800 of
+                                true -> new_token(Account);
+                                false -> Jwt
+                           end;
+        [] -> new_token(Account)
+    end.
 
 new_token(Account) ->
-    <<"bearer ", (simple_push_jwt:encode(Account#account.team_id,
-                                         Account#account.p8_key,
-                                         Account#account.key_id))/binary>>.
+    Token = <<"bearer ", (simple_push_jwt:encode(Account#account.team_id,
+                                                 Account#account.p8_key,
+                                                 Account#account.key_id))/binary>>,
+    ets:insert(apns_tokens, {Account#account.id, erlang:monotonic_time(seconds), Token}),
+    Token.

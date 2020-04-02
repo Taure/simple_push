@@ -71,12 +71,7 @@ create_account(#account{} = Account) ->
 -spec fetch_account(Account :: account()) -> {ok, account()} |
                                             {error, not_found}.
 fetch_account(#account{id = Id}) ->
-    case ets:lookup(simple_push_account, Id) of
-        [] ->
-            {error, not_found};
-        [Account|_] ->
-            {ok, Account}
-    end.
+    gen_server:call(?SERVER, {fetch_account, Id}).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -119,12 +114,18 @@ init([]) ->
                          {stop, Reason :: term(), Reply :: term(), NewState :: term()} |
                          {stop, Reason :: term(), NewState :: term()}.
 handle_call({create_account, Account = #account{}}, _From, State) ->
-    Id = uuid:uuid_to_string(uuid:get_v4_urandom()),
+    Id = list_to_binary(uuid:uuid_to_string(uuid:get_v4_urandom())),
     Row = Account#account{id = Id},
     {atomic, _} = mnesia:transaction(fun() ->
                                              mnesia:write(Row)
                                      end),
     {reply, {ok, Row}, State};
+handle_call({fetch_account, Id}, _From, State) ->
+    Result = case mnesia:dirty_read(account, Id) of
+                [] -> {error, not_found};
+                [Account] -> {ok, Account}
+             end,
+    {reply, Result, State};
 handle_call(_Request, _From, State) ->
     Reply = ok,
     {reply, Reply, State}.

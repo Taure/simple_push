@@ -35,7 +35,8 @@ init([]) ->
                     restart => permanent,
                     shutdown => brutal_kill,
                     type => worker,
-                    modules => [X]} || X <- [simple_push_db]
+                    modules => [X]} || X <- [simple_push_db,
+                                             simple_push_apns]
                  ],
     {ok, { {one_for_all, 0, 1}, ChildSpecs} }.
 
