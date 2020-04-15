@@ -16,7 +16,7 @@
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
 	 terminate/2, code_change/3, format_status/2]).
--export([send/4]).
+-export([send/5]).
 
 -define(SERVER, ?MODULE).
 
@@ -28,8 +28,8 @@
 %%% API
 %%%===================================================================
 
-send(Account, DeviceTokens, Message, BundleId) ->
-    [gen_server:cast(?MODULE, {send, {Account, DeviceToken, Message, BundleId}}) ||DeviceToken <- DeviceTokens].
+send(Account, DeviceTokens, Message, BundleId, ApnsType) ->
+    [gen_server:cast(?MODULE, {send, {Account, DeviceToken, Message, BundleId, ApnsType}}) ||DeviceToken <- DeviceTokens].
 
 %%--------------------------------------------------------------------
 %% @doc
