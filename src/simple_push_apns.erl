@@ -96,13 +96,13 @@ handle_call(_Request, _From, State) ->
 			 {noreply, NewState :: term(), Timeout :: timeout()} |
 			 {noreply, NewState :: term(), hibernate} |
 			 {stop, Reason :: term(), NewState :: term()}.
-handle_cast({send, {Account, DeviceToken, Message, BundleId}}, State) ->
+handle_cast({send, {Account, DeviceToken, Message, BundleId, ApnsType}}, State) ->
     Con = case State#state.con of 
               undefined -> connect();
               _ -> State#state.con
           end,
     Token = token(Account),
-    NewState = case send_push(Con, Token, DeviceToken, Message, BundleId) of
+    NewState = case send_push(Con, Token, DeviceToken, Message, BundleId, ApnsType) of
                    ok -> #state{con = Con};
                    error -> #state{con = undefined}
                 end,           
@@ -169,12 +169,13 @@ format_status(_Opt, Status) ->
 %%%===================================================================
 
 connect() ->
-    connect("api.development.push.apple.com", 443).
+    {ok, {Url, Port}} = application:get_env(simple_push, apns_url),
+    connect(Url, Port).
 connect(Host, Port) ->
     {ok, ConnPid} = h2_client:start_link(https, Host, Port, [{mode, binary}]),
     ConnPid.
 
-send_push(Con, JwtToken, DeviceToken, Message, BundleId) ->
+send_push(Con, JwtToken, DeviceToken, Message, BundleId, ApnsType) ->
     MsgId = uuid:uuid_to_string(uuid:get_v4()),
     ReqHeaders = [{<<":method">>, <<"POST">>},
                 {<<":scheme">>, <<"https">>},
@@ -183,6 +184,7 @@ send_push(Con, JwtToken, DeviceToken, Message, BundleId) ->
                 {<<"authorization">>, JwtToken},
                 {<<"apns-priority">>, <<"10">>},
                 {<<"apns-topic">>, BundleId},
+                {<<"apns-push-type">>, ApnsType},
                 {<<"accept">>, <<"*/*">>},
                 {<<"accept-encoding">>, <<"gzip, deflate">>},
                 {<<"user-agent">>, <<"chatterbox-client/0.0.1">>}
