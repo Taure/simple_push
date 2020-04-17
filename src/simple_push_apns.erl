@@ -124,6 +124,8 @@ handle_cast(Request, State) ->
 handle_info(ping, State) ->
     h2_client:send_ping(State#state.con),
     {noreply, set_ping(State)};
+handle_info({'PONG', Pid}, State = #state{con = Pid}) ->
+    {noreply, State};
 handle_info({'EXIT', Reason, Pid}, State = #state{con = Pid}) ->
     ?INFO("Process terminated: ~w:~w", [Reason, Pid]),
     NewPid = connect(),
