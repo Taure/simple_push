@@ -122,7 +122,7 @@ handle_cast(Request, State) ->
 			 {noreply, NewState :: term(), hibernate} |
 			 {stop, Reason :: normal | term(), NewState :: term()}.
 handle_info(ping, State) ->
-    h2_client:ping(State#state.con),
+    h2_client:send_ping(State#state.con),
     {noreply, set_ping(State)};
 handle_info({'EXIT', Reason, Pid}, State = #state{con = Pid}) ->
     ?INFO("Process terminated: ~w:~w", [Reason, Pid]),
