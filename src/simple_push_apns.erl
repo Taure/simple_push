@@ -189,10 +189,11 @@ connect(Host, Port) ->
 send_push(Con, JwtToken, DeviceToken, Message, BundleId, ApnsType) ->
     MsgId = uuid:uuid_to_string(uuid:get_v4()),
     {ok, {APIUrl, _APIPort}} = application:get_env(simple_push, apns_url),
+    APIUrlBin = erlang:list_to_binary(APIUrl),
     ReqHeaders = [{<<":method">>, <<"POST">>},
                   {<<":scheme">>, <<"https">>},
                   {<<":path">>, <<"/3/device/", DeviceToken/binary>>},
-                  {<<":authority">>, APIUrl},
+                  {<<":authority">>, APIUrlBin},
                   {<<"authorization">>, JwtToken},
                   {<<"apns-priority">>, <<"10">>},
                   {<<"apns-topic">>, BundleId},
