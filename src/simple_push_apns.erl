@@ -126,8 +126,8 @@ handle_info(ping, State) ->
     {noreply, set_ping(State)};
 handle_info({'PONG', Pid}, State = #state{con = Pid}) ->
     {noreply, State};
-handle_info({'EXIT', Reason, Pid}, State = #state{con = Pid}) ->
-    ?INFO("Process terminated: ~w:~w", [Reason, Pid]),
+handle_info({'EXIT', Pid, Reason}, State = #state{con = Pid}) ->
+    ?INFO("Process terminated: ~p:~p", [Reason, Pid]),
     NewPid = connect(),
     NewState = State#state{con = NewPid},
     {noreply, set_ping(NewState)};
