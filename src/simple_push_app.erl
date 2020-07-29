@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%% @doc nova_admin public API
+%% @doc 
 %% @end
 %%%-------------------------------------------------------------------
 
@@ -18,7 +18,6 @@ start(_StartType, _StartArgs) ->
     logger:set_primary_config(level, debug),
     mnesia:create_schema([node()]),
     ok = mnesia:start(),
-    nova_sup:start_link(),
     simple_push_sup:start_link().
 
 %%--------------------------------------------------------------------

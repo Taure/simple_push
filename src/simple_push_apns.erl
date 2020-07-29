@@ -16,20 +16,22 @@
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
 	 terminate/2, code_change/3, format_status/2]).
--export([send/4]).
+-export([send/5]).
 
 -define(SERVER, ?MODULE).
+-define(PING_TIMEOUT, 60000).
 
 -include("simple_push.hrl").
 
--record(state, {con = undefined :: pid()}).
+-record(state, {con = undefined :: pid(),
+                ping}).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
-send(Account, DeviceTokens, Message, BundleId) ->
-    [gen_server:cast(?MODULE, {send, {Account, DeviceToken, Message, BundleId}}) ||DeviceToken <- DeviceTokens].
+send(Account, DeviceTokens, Message, BundleId, ApnsType) ->
+    [gen_server:cast(?MODULE, {send, {Account, DeviceToken, Message, BundleId, ApnsType}}) ||DeviceToken <- DeviceTokens].
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -60,7 +62,7 @@ start_link() ->
 			      ignore.
 init([]) ->
     process_flag(trap_exit, true),
-    ets:new(apns_tokens, [named_table]),
+    gen_server:cast(?SERVER, start),
     {ok, #state{}}.
 
 %%--------------------------------------------------------------------
@@ -96,18 +98,16 @@ handle_call(_Request, _From, State) ->
 			 {noreply, NewState :: term(), Timeout :: timeout()} |
 			 {noreply, NewState :: term(), hibernate} |
 			 {stop, Reason :: term(), NewState :: term()}.
-handle_cast({send, {Account, DeviceToken, Message, BundleId}}, State) ->
-    Con = case State#state.con of 
-              undefined -> connect();
-              _ -> State#state.con
-          end,
+handle_cast({send, {Account, DeviceToken, Message, BundleId, ApnsType}}, State) ->
     Token = token(Account),
-    NewState = case send_push(Con, Token, DeviceToken, Message, BundleId) of
-                   ok -> #state{con = Con};
-                   error -> #state{con = undefined}
-                end,           
+    send_push(State#state.con, Token, DeviceToken, Message, BundleId, ApnsType),
+    {noreply, State};
+handle_cast(start, State) ->
+    ets:new(apns_tokens, [named_table]),
+    NewState = set_ping(State#state{con = connect()}),
     {noreply, NewState};
-handle_cast(_Request, State) ->
+handle_cast(Request, State) ->
+    ?WARNING("UNEXPECTED CAST: ~p State: ~p", [Request, State]),
     {noreply, State}.
 
 %%--------------------------------------------------------------------
@@ -121,7 +121,18 @@ handle_cast(_Request, State) ->
 			 {noreply, NewState :: term(), Timeout :: timeout()} |
 			 {noreply, NewState :: term(), hibernate} |
 			 {stop, Reason :: normal | term(), NewState :: term()}.
-handle_info(_Info, State) ->
+handle_info(ping, State) ->
+    h2_client:send_ping(State#state.con),
+    {noreply, set_ping(State)};
+handle_info({'PONG', Pid}, State = #state{con = Pid}) ->
+    {noreply, State};
+handle_info({'EXIT', Pid, Reason}, State = #state{con = Pid}) ->
+    ?INFO("Process terminated: ~p:~p", [Reason, Pid]),
+    NewPid = connect(),
+    NewState = State#state{con = NewPid},
+    {noreply, set_ping(NewState)};
+handle_info(Info, State) ->
+    ?WARNING("UNEXPECTED: ~p State: ~p", [Info, State]),
     {noreply, State}.
 
 %%--------------------------------------------------------------------
@@ -169,24 +180,28 @@ format_status(_Opt, Status) ->
 %%%===================================================================
 
 connect() ->
-    connect("api.development.push.apple.com", 443).
+    {ok, {Url, Port}} = application:get_env(simple_push, apns_url),
+    connect(Url, Port).
 connect(Host, Port) ->
     {ok, ConnPid} = h2_client:start_link(https, Host, Port, [{mode, binary}]),
     ConnPid.
 
-send_push(Con, JwtToken, DeviceToken, Message, BundleId) ->
+send_push(Con, JwtToken, DeviceToken, Message, BundleId, ApnsType) ->
     MsgId = uuid:uuid_to_string(uuid:get_v4()),
+    {ok, {APIUrl, _APIPort}} = application:get_env(simple_push, apns_url),
+    APIUrlBin = erlang:list_to_binary(APIUrl),
     ReqHeaders = [{<<":method">>, <<"POST">>},
-                {<<":scheme">>, <<"https">>},
-                {<<":path">>, <<"/3/device/", DeviceToken/binary>>},
-                {<<":authority">>, <<"api.development.push.apple.com">>},
-                {<<"authorization">>, JwtToken},
-                {<<"apns-priority">>, <<"10">>},
-                {<<"apns-topic">>, BundleId},
-                {<<"accept">>, <<"*/*">>},
-                {<<"accept-encoding">>, <<"gzip, deflate">>},
-                {<<"user-agent">>, <<"chatterbox-client/0.0.1">>}
-                ],
+                  {<<":scheme">>, <<"https">>},
+                  {<<":path">>, <<"/3/device/", DeviceToken/binary>>},
+                  {<<":authority">>, APIUrlBin},
+                  {<<"authorization">>, JwtToken},
+                  {<<"apns-priority">>, <<"10">>},
+                  {<<"apns-topic">>, BundleId},
+                  {<<"apns-push-type">>, ApnsType},
+                  {<<"accept">>, <<"*/*">>},
+                  {<<"accept-encoding">>, <<"gzip, deflate">>},
+                  {<<"user-agent">>, <<"chatterbox-client/0.0.1">>}
+                 ],
     ReqBody = json:encode(Message, [maps, binary]),
     {ok, Id} = h2_client:send_request(Con, ReqHeaders, ReqBody),
     receive
@@ -224,3 +239,9 @@ new_token(Account) ->
                                                  Account#account.key_id))/binary>>,
     ets:insert(apns_tokens, {Account#account.id, erlang:monotonic_time(seconds), Token}),
     Token.
+
+set_ping(State = #state{ping = undefined}) ->
+    State#state{ping = erlang:send_after(?PING_TIMEOUT, self(), ping)};
+set_ping(State = #state{ping = Tref}) ->
+    erlang:cancel_timer(Tref),
+    State#state{ping = erlang:send_after(?PING_TIMEOUT, self(), ping)}.
